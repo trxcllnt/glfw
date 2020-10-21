@@ -24,6 +24,8 @@ option(GLFW_VULKAN_STATIC "Assume the Vulkan loader is linked with the applicati
 include(GNUInstallDirs)
 include(CMakeDependentOption)
 
+cmake_dependent_option(GLFW_USE_EGLHEADLESS "Use EGL for offscreen context creation" OFF
+                       "UNIX" OFF)
 cmake_dependent_option(GLFW_USE_OSMESA "Use OSMesa for offscreen context creation" OFF
                        "UNIX" OFF)
 cmake_dependent_option(GLFW_USE_HYBRID_HPG "Force use of high-performance GPU on hybrid systems" OFF
@@ -139,6 +141,9 @@ endif()
 if (GLFW_USE_WAYLAND)
     set(_GLFW_WAYLAND 1)
     message(STATUS "Using Wayland for window creation")
+elseif (GLFW_USE_EGLHEADLESS)
+    set(_GLFW_EGLHEADLESS 1)
+    message(STATUS "Using EGL for headless context creation")
 elseif (GLFW_USE_OSMESA)
     set(_GLFW_OSMESA 1)
     message(STATUS "Using OSMesa for headless context creation")
@@ -270,6 +275,13 @@ if (_GLFW_WAYLAND)
 endif()
 
 #--------------------------------------------------------------------
+# Use EGL for offscreen context creation
+#--------------------------------------------------------------------
+if (_GLFW_EGLHEADLESS)
+    list(APPEND glfw_LIBRARIES "${CMAKE_THREAD_LIBS_INIT}")
+endif()
+
+#--------------------------------------------------------------------
 # Use OSMesa for offscreen context creation
 #--------------------------------------------------------------------
 if (_GLFW_OSMESA)
@@ -374,4 +386,3 @@ if (GLFW_INSTALL)
         set_target_properties(uninstall PROPERTIES FOLDER "GLFW3")
     endif()
 endif()
-

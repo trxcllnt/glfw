@@ -34,6 +34,12 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#define setAttrib(a, v) \
+{ \
+    assert(((size_t) index + 1) < sizeof(attribs) / sizeof(attribs[0])); \
+    attribs[index++] = a; \
+    attribs[index++] = v; \
+}
 
 // Return a description of the specified EGL error
 //
@@ -118,9 +124,14 @@ static GLFWbool chooseEGLConfig(const _GLFWctxconfig* ctxconfig,
         if (getEGLConfigAttrib(n, EGL_COLOR_BUFFER_TYPE) != EGL_RGB_BUFFER)
             continue;
 
+        #if defined(_GLFW_EGLHEADLESS)
+        if (!(getEGLConfigAttrib(n, EGL_SURFACE_TYPE) & EGL_PBUFFER_BIT))
+            continue;
+        #else
         // Only consider window EGLConfigs
         if (!(getEGLConfigAttrib(n, EGL_SURFACE_TYPE) & EGL_WINDOW_BIT))
             continue;
+        #endif
 
 #if defined(_GLFW_X11)
         {
@@ -240,13 +251,14 @@ static void swapIntervalEGL(int interval)
 
 static int extensionSupportedEGL(const char* extension)
 {
+#if !defined(_GLFW_EGLHEADLESS)
     const char* extensions = eglQueryString(_glfw.egl.display, EGL_EXTENSIONS);
     if (extensions)
     {
         if (_glfwStringInExtensionString(extension, extensions))
             return GLFW_TRUE;
     }
-
+#endif
     return GLFW_FALSE;
 }
 
@@ -360,6 +372,8 @@ GLFWbool _glfwInitEGL(void)
         _glfw_dlsym(_glfw.egl.handle, "eglDestroyContext");
     _glfw.egl.CreateWindowSurface = (PFN_eglCreateWindowSurface)
         _glfw_dlsym(_glfw.egl.handle, "eglCreateWindowSurface");
+    _glfw.egl.CreatePbufferSurface = (PFN_eglCreatePbufferSurface)
+        _glfw_dlsym(_glfw.egl.handle, "eglCreatePbufferSurface");
     _glfw.egl.MakeCurrent = (PFN_eglMakeCurrent)
         _glfw_dlsym(_glfw.egl.handle, "eglMakeCurrent");
     _glfw.egl.SwapBuffers = (PFN_eglSwapBuffers)
@@ -382,6 +396,7 @@ GLFWbool _glfwInitEGL(void)
         !_glfw.egl.DestroySurface ||
         !_glfw.egl.DestroyContext ||
         !_glfw.egl.CreateWindowSurface ||
+        !_glfw.egl.CreatePbufferSurface ||
         !_glfw.egl.MakeCurrent ||
         !_glfw.egl.SwapBuffers ||
         !_glfw.egl.SwapInterval ||
@@ -395,7 +410,11 @@ GLFWbool _glfwInitEGL(void)
         return GLFW_FALSE;
     }
 
+    #if defined(_GLFW_EGLHEADLESS)
+    _glfw.egl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    #else
     _glfw.egl.display = eglGetDisplay(_GLFW_EGL_NATIVE_DISPLAY);
+    #endif
     if (_glfw.egl.display == EGL_NO_DISPLAY)
     {
         _glfwInputError(GLFW_API_UNAVAILABLE,
@@ -447,13 +466,6 @@ void _glfwTerminateEGL(void)
     }
 }
 
-#define setAttrib(a, v) \
-{ \
-    assert(((size_t) index + 1) < sizeof(attribs) / sizeof(attribs[0])); \
-    attribs[index++] = a; \
-    attribs[index++] = v; \
-}
-
 // Create the OpenGL or OpenGL ES context
 //
 GLFWbool _glfwCreateContextEGL(_GLFWwindow* window,
@@ -464,6 +476,8 @@ GLFWbool _glfwCreateContextEGL(_GLFWwindow* window,
     EGLConfig config;
     EGLContext share = NULL;
     int index = 0;
+    int width = 0;
+    int height = 0;
 
     if (!_glfw.egl.display)
     {
@@ -574,10 +588,21 @@ GLFWbool _glfwCreateContextEGL(_GLFWwindow* window,
         }
     }
 
+    #if defined(_GLFW_EGLHEADLESS)
+    setAttrib(EGL_CONTEXT_MAJOR_VERSION, ctxconfig->major);
+    setAttrib(EGL_CONTEXT_MINOR_VERSION, ctxconfig->minor);
+    setAttrib(EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT);
+    #endif
+
     setAttrib(EGL_NONE, EGL_NONE);
 
+    #if defined(_GLFW_EGLHEADLESS)
+    window->context.egl.handle = eglCreateContext(_glfw.egl.display,
+                                                  config, share, NULL);
+    #else
     window->context.egl.handle = eglCreateContext(_glfw.egl.display,
                                                   config, share, attribs);
+    #endif
 
     if (window->context.egl.handle == EGL_NO_CONTEXT)
     {
@@ -590,19 +615,30 @@ GLFWbool _glfwCreateContextEGL(_GLFWwindow* window,
     // Set up attributes for surface creation
     index = 0;
 
+    #if defined(_GLFW_EGLHEADLESS)
+    _glfwPlatformGetFramebufferSize(window, &width, &height);
+    setAttrib(EGL_WIDTH, width);
+    setAttrib(EGL_HEIGHT, height);
+    #else
     if (fbconfig->sRGB)
     {
         if (_glfw.egl.KHR_gl_colorspace)
             setAttrib(EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_SRGB_KHR);
     }
+    #endif
 
     setAttrib(EGL_NONE, EGL_NONE);
 
+    #if defined(_GLFW_EGLHEADLESS)
+    window->context.egl.surface =
+        eglCreatePbufferSurface(_glfw.egl.display, config, attribs);
+    #else
     window->context.egl.surface =
         eglCreateWindowSurface(_glfw.egl.display,
                                config,
                                _GLFW_EGL_NATIVE_WINDOW,
                                attribs);
+    #endif
     if (window->context.egl.surface == EGL_NO_SURFACE)
     {
         _glfwInputError(GLFW_PLATFORM_ERROR,
@@ -784,4 +820,3 @@ GLFWAPI EGLSurface glfwGetEGLSurface(GLFWwindow* handle)
 
     return window->context.egl.surface;
 }
-

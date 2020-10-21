@@ -190,6 +190,8 @@ typedef void (APIENTRY * PFN_vkVoidFunction)(void);
  #include "wl_platform.h"
 #elif defined(_GLFW_OSMESA)
  #include "null_platform.h"
+#elif defined(_GLFW_EGLHEADLESS)
+ #include "null_platform.h"
 #else
  #error "No supported window creation API selected"
 #endif
@@ -775,4 +777,3 @@ const char* _glfwGetVulkanResultString(VkResult result);
 char* _glfw_strdup(const char* source);
 float _glfw_fminf(float a, float b);
 float _glfw_fmaxf(float a, float b);
-
