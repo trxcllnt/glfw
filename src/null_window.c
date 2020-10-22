@@ -27,8 +27,8 @@
 // It is fine to use C99 in this file because it will not be built with VS
 //========================================================================
 
-#include "GLFW/glfw3.h"
 #include "internal.h"
+#include "GLFW/glfw3.h"
 
 
 static int createNativeWindow(_GLFWwindow* window,
